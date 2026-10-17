@@ -5,6 +5,7 @@ import com.novibe.common.base_structures.BypassRoute;
 import com.novibe.common.util.DonorDnsUtils;
 import com.novibe.common.util.EnvParser;
 import com.novibe.common.util.Log;
+import com.novibe.common.util.RunSafety;
 import com.novibe.dns.next_dns.http.dto.request.CreateRewriteDto;
 import com.novibe.dns.next_dns.service.NextDnsDenyService;
 import com.novibe.dns.next_dns.service.NextDnsRewriteService;
@@ -40,29 +41,47 @@ public class NextDnsTaskRunner extends DnsTaskRunner {
     @Override
     protected void process() {
         List<String> blockSources = EnvParser.parse(BLOCK);
+        List<String> rewriteSources = EnvParser.parse(REDIRECT);
+
+        List<String> blocks = blockSources.isEmpty()
+                ? List.of()
+                : blockListsLoader.fetchWebsites(blockSources);
+        List<BypassRoute> overrides = rewriteSources.isEmpty()
+                ? List.of()
+                : overrideListsLoader.fetchWebsites(rewriteSources);
+
+        boolean allowEmpty = RunSafety.allowEmptyConfig();
+        if (blockSources.isEmpty() && rewriteSources.isEmpty()) {
+            RunSafety.requireNonEmpty("BLOCK and REDIRECT sources", List.of(), allowEmpty);
+        }
         if (!blockSources.isEmpty()) {
-            Log.step("Obtain block lists from %s sources".formatted(blockSources.size()));
-            List<String> blocks = blockListsLoader.fetchWebsites(blockSources);
+            RunSafety.requireNonEmpty("BLOCK list", blocks, allowEmpty);
+        }
+        if (!rewriteSources.isEmpty()) {
+            RunSafety.requireNonEmpty("REDIRECT list", overrides, allowEmpty);
+        }
+
+        if (nonNull(dnsProfile.donorDns()) && !overrides.isEmpty()) {
+            Log.step("Replace IP of domains via IPs from " + dnsProfile.donorDns());
+            DonorDnsUtils.replaceIPs(overrides, dnsProfile);
+        }
+
+        if (RunSafety.isDryRun()) {
+            RunSafety.reportDryRun("NextDNS", blocks.size(), overrides.size());
+            return;
+        }
+
+        if (!blockSources.isEmpty()) {
             Log.step("Prepare denylist");
             List<String> filteredBlocklist = nextDnsDenyService.omitExistingDenys(blocks);
             Log.common("Prepared %s domains to block".formatted(filteredBlocklist.size()));
             Log.step("Save denylist");
             nextDnsDenyService.saveDenyList(filteredBlocklist);
         } else {
-            Log.fail("No block sources provided");
+            Log.fail("No block sources provided; existing deny rules are left unchanged");
         }
 
-        List<String> rewriteSources = EnvParser.parse(REDIRECT);
         if (!rewriteSources.isEmpty()) {
-
-            Log.step("Obtain rewrite lists from %s sources".formatted(rewriteSources.size()));
-            List<BypassRoute> overrides = overrideListsLoader.fetchWebsites(rewriteSources);
-
-            if (nonNull(dnsProfile.donorDns())) {
-                Log.step("Replace IP of domains via IPs from " + dnsProfile.donorDns());
-                DonorDnsUtils.replaceIPs(overrides, dnsProfile);
-            }
-
             Log.step("Prepare rewrites");
             Map<String, CreateRewriteDto> requests = nextDnsRewriteService.buildNewRewrites(overrides);
             List<CreateRewriteDto> createRewriteDtos = nextDnsRewriteService.cleanupOutdatedAndExcluded(requests);
@@ -70,11 +89,11 @@ public class NextDnsTaskRunner extends DnsTaskRunner {
             Log.step("Save rewrites");
             nextDnsRewriteService.saveRewrites(createRewriteDtos);
         } else {
-            Log.fail("No rewrite sources provided");
+            Log.fail("No redirect sources provided; existing rewrite rules are left unchanged");
         }
 
         if (blockSources.isEmpty() && rewriteSources.isEmpty()) {
-            Log.step("Remove settings");
+            Log.step("Remove settings (explicitly enabled by ALLOW_EMPTY_CONFIG)");
             nextDnsDenyService.removeAll();
             nextDnsRewriteService.removeAll();
         }
