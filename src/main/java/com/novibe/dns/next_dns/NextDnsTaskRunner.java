@@ -101,6 +101,10 @@ public class NextDnsTaskRunner extends DnsTaskRunner {
 
     @Override
     protected void finishMessage() {
-        Log.global("Profile " + dnsProfile.number() + " (NextDNS) set up successfully");
+        if (RunSafety.isDryRun()) {
+            Log.global("Profile " + dnsProfile.number() + " (NextDNS) dry run completed; no changes applied");
+        } else {
+            Log.global("Profile " + dnsProfile.number() + " (NextDNS) set up successfully");
+        }
     }
 }
