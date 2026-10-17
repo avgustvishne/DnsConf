@@ -38,7 +38,7 @@ public class DonorDnsUtils {
         // Do not return until every lookup has completed. Otherwise the caller can
         // start writing provider rules while these tasks are still changing route IPs.
         @Cleanup ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        List<Future<?>> futures = bypassRoutes.stream()
+        var futures = bypassRoutes.stream()
                 .map(route -> executor.submit(() -> replaceIp(route, dnsResolver)))
                 .toList();
         for (Future<?> future : futures) {
