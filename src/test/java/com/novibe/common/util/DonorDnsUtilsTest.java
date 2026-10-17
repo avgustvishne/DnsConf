@@ -20,8 +20,23 @@ class DonorDnsUtilsTest {
     }
 
     @Test
-    void takesFirstDonorIpWhenCurrentIpIsOutdated() {
+    void takesFirstDonorIpOfSameFamilyWhenCurrentIpIsOutdated() {
         assertEquals("1.1.1.1", DonorDnsUtils.chooseIp("9.9.9.9", donorIps("1.1.1.1", "1.1.1.2")));
+    }
+
+    @Test
+    void doesNotReplaceIpv4WithIpv6() {
+        assertEquals("9.9.9.9", DonorDnsUtils.chooseIp("9.9.9.9", donorIps("2001:db8::1")));
+    }
+
+    @Test
+    void doesNotReplaceIpv6WithIpv4() {
+        assertEquals("2001:db8::9", DonorDnsUtils.chooseIp("2001:db8::9", donorIps("1.1.1.1")));
+    }
+
+    @Test
+    void choosesIpv6WhenCurrentIpv6IsOutdated() {
+        assertEquals("2001:db8::1", DonorDnsUtils.chooseIp("2001:db8::9", donorIps("1.1.1.1", "2001:db8::1")));
     }
 
     @Test
