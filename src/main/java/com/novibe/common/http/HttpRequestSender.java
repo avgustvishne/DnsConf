@@ -100,7 +100,7 @@ public abstract class HttpRequestSender {
     private void waitForRetry(HttpResponse<String> response, int attempt) {
         Duration delay = retryAfter(response).orElse(retryDelay());
         long seconds = Math.max(0, delay.toSeconds());
-        Log.common("\\nCode %s received. Attempt %s of %s, waiting %s seconds before retry"
+        Log.common("\nCode %s received. Attempt %s of %s, waiting %s seconds before retry"
                 .formatted(response.statusCode(), attempt, retryAttempts(), seconds));
         for (long secondsLeft = seconds; secondsLeft > 0; secondsLeft--) {
             try {
