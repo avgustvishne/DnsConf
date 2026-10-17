@@ -5,14 +5,21 @@ on:
     - cron: '30 1 * * *' # 04:30 MSK (01:30 UTC)
   workflow_dispatch:
 
-# Two runs at once read and write the same dns profile, so a new run replaces the one in progress
+# DNS updates mutate remote provider state. Do not cancel a running deployment
+# midway through a batch of API operations; let the next run wait instead.
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+# The workflow only reads this repository; provider credentials are stored as
+# environment secrets and do not require repository write permissions.
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: DNS
 
     env:
@@ -39,7 +46,7 @@ jobs:
           cache: maven
 
       - name: Build with Maven
-        run: mvn -B clean package
+        run: mvn --batch-mode --no-transfer-progress clean package
 
       - name: Run application
         run: |
