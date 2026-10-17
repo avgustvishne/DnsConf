@@ -74,7 +74,7 @@ public abstract class ListLoader<T> extends HttpRequestSender {
                     .filter(line -> !line.isBlank())
                     .filter(line -> !DataParser.isComment(line))
                     .map(String::toLowerCase)
-                    .map(DataParser::parseHostsLine)
+                    .flatMap(DataParser::parseHostsLines)
                     .filter(Objects::nonNull)
                     .filter(filterRelatedLines())
                     .distinct()
