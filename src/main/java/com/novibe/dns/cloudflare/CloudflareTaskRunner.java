@@ -94,7 +94,10 @@ public class CloudflareTaskRunner extends DnsTaskRunner {
 
     @Override
     protected void finishMessage() {
-        Log.global("Profile " + dnsProfile.number() + " (Cloudflare) set up successfully");
-
+        if (RunSafety.isDryRun()) {
+            Log.global("Profile " + dnsProfile.number() + " (Cloudflare) dry run completed; no changes applied");
+        } else {
+            Log.global("Profile " + dnsProfile.number() + " (Cloudflare) set up successfully");
+        }
     }
 }
