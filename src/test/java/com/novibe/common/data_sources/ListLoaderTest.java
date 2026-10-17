@@ -11,10 +11,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ListLoaderTest {
@@ -70,6 +73,19 @@ class ListLoaderTest {
 
         assertEquals(2, routes.size());
         verify(httpClient, times(RETRY_ATTEMPTS)).send(any(), any());
+    }
+
+    @Test
+    void honorsRetryAfterHeaderInsteadOfLongerFallbackDelay() throws IOException, InterruptedException {
+        doReturn(Duration.ofMinutes(1)).when(loader).retryDelay();
+        HttpResponse<String> rateLimited = response(429, "too many requests", HOSTS_URL);
+        when(rateLimited.headers()).thenReturn(HttpHeaders.of(Map.of("Retry-After", List.of("0")), (name, value) -> true));
+        doReturn(rateLimited, response(200, HOSTS_BODY, HOSTS_URL)).when(httpClient).send(any(), any());
+
+        List<BypassRoute> routes = loader.fetchWebsites(List.of(HOSTS_URL));
+
+        assertEquals(2, routes.size());
+        verify(httpClient, times(2)).send(any(), any());
     }
 
     @Test

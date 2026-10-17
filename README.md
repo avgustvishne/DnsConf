@@ -272,3 +272,15 @@ Reconfiguring via the configurator https://dns-conf-ui.vercel.app also enables t
 
 Keep in mind that proxy IPs change over time, so in a fork that has been disabled for a long time, the rules remain
 outdated until the first successful run.
+
+
+## Safe updates and dry-run mode
+
+The workflow supports two optional repository/environment variables:
+
+- `DRY_RUN=true`: download and parse the configured sources, apply exclusions and (if configured) resolve donor DNS addresses, then print a count summary. It does **not** create, update, or delete DNS-provider rules. Set it to `false` or remove the variable to perform normal updates.
+- `ALLOW_EMPTY_CONFIG=true`: explicitly allow empty parsed lists. Without this opt-in, the run stops before changing provider settings if a configured list produces no entries. This helps prevent a broken source URL or an unexpectedly empty list from deleting managed rules.
+
+For Cloudflare, both block and redirect entries must be non-empty by default because the workflow replaces both sets of managed rules. For NextDNS, a configured source that parses to zero entries is rejected; when both `BLOCK` and `REDIRECT` are omitted, clearing managed settings requires `ALLOW_EMPTY_CONFIG=true`.
+
+Use the empty-configuration override only when clearing managed rules is intentional. A dry run is a summary of validated input counts, not a complete provider-side diff.

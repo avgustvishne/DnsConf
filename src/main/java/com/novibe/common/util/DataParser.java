@@ -24,23 +24,35 @@ public class DataParser {
     }
 
     public static @Nullable HostsLine parseHostsLine(String line) {
+        return parseHostsLines(line).findFirst().orElse(null);
+    }
+
+    /**
+     * Parses a hosts line into all its entries. Standard hosts files allow more than
+     * one hostname to share the same IP address (for example: "127.0.0.1 a.test b.test").
+     */
+    public static Stream<HostsLine> parseHostsLines(String line) {
         String sanitizedLine = stripInlineComment(line);
         if (sanitizedLine.isBlank()) {
-            return null;
+            return Stream.empty();
         }
-        String[] columns = WHITESPACE.split(sanitizedLine, 3);
+
+        String[] columns = WHITESPACE.split(sanitizedLine.strip());
         if (columns.length == 1) {
             String value = columns[0];
-            return isValidIP(value) ? HostsLine.ipOnly(value) : HostsLine.domainOnly(removeWWW(value));
-        } else if (columns.length == 2) {
-            String ip = columns[0];
-            String domain = removeWWW(columns[1]);
-            if (isValidIP(ip)) {
-                return new HostsLine(ip, domain);
-            }
+            return Stream.of(isValidIP(value) ? HostsLine.ipOnly(value) : HostsLine.domainOnly(removeWWW(value)));
         }
+
+        String ip = columns[0];
+        if (isValidIP(ip)) {
+            return java.util.Arrays.stream(columns)
+                    .skip(1)
+                    .map(DataParser::removeWWW)
+                    .map(domain -> new HostsLine(ip, domain));
+        }
+
         Log.fail("Failed to parse hosts line: " + line);
-        return null;
+        return Stream.empty();
     }
 
     public static Stream<String> splitByEol(String data) {

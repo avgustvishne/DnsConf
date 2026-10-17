@@ -12,7 +12,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Semaphore;
 
 import static java.util.Objects.isNull;
@@ -52,14 +56,17 @@ public abstract class HttpRequestSender {
             if (responseCode > 299) {
                 DnsHttpError httpError = new DnsHttpError(response, body);
                 if (isTemporaryError(responseCode) && attempt < retryAttempts()) {
-                    waitForRetry(responseCode, attempt);
+                    waitForRetry(response, attempt);
                     return sendRequest(method, path, body, attempt + 1);
                 }
                 reactOnError(httpError);
             }
             return response;
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("HTTP request interrupted", e);
+        } catch (IOException e) {
+            throw new RuntimeException("HTTP request failed", e);
         }
     }
 
@@ -70,6 +77,7 @@ public abstract class HttpRequestSender {
                 : HttpRequest.BodyPublishers.ofString(body.toJson());
 
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(requestUrl(path)))
+                .timeout(Duration.ofSeconds(30))
                 .method(method, requestBody);
         headers().forEach(request::header);
 
@@ -89,18 +97,41 @@ public abstract class HttpRequestSender {
         };
     }
 
-    private void waitForRetry(int responseCode, int attempt) {
+    private void waitForRetry(HttpResponse<String> response, int attempt) {
+        Duration delay = retryAfter(response).orElse(retryDelay());
+        long seconds = Math.max(0, delay.toSeconds());
         Log.common("\nCode %s received. Attempt %s of %s, waiting %s seconds before retry"
-                .formatted(responseCode, attempt, retryAttempts(), retryDelay().toSeconds()));
-        for (long secondsLeft = retryDelay().toSeconds(); secondsLeft > 0; secondsLeft--) {
+                .formatted(response.statusCode(), attempt, retryAttempts(), seconds));
+        for (long secondsLeft = seconds; secondsLeft > 0; secondsLeft--) {
             try {
                 Thread.sleep(Duration.ofSeconds(1));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
+                throw new RuntimeException("Interrupted while waiting to retry HTTP request", e);
             }
             Log.progress("Waiting for reset: " + secondsLeft + " seconds");
         }
     }
 
+    private Optional<Duration> retryAfter(HttpResponse<?> response) {
+        if (response.headers() == null) {
+            return Optional.empty();
+        }
+        Optional<String> value = response.headers().firstValue("Retry-After");
+        if (value.isEmpty()) {
+            return Optional.empty();
+        }
+        String header = value.get().strip();
+        try {
+            return Optional.of(Duration.ofSeconds(Math.max(0, Long.parseLong(header))));
+        } catch (NumberFormatException ignored) {
+            try {
+                Duration untilRetry = Duration.between(Instant.now(),
+                        ZonedDateTime.parse(header, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant());
+                return Optional.of(untilRetry.isNegative() ? Duration.ZERO : untilRetry);
+            } catch (Exception invalidDate) {
+                return Optional.empty();
+            }
+        }
+    }
 }
