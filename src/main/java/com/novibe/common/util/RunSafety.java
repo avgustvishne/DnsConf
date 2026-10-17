@@ -39,8 +39,8 @@ public final class RunSafety {
     public static void requireNonEmpty(String description, Collection<?> values, boolean allowEmpty) {
         if (values.isEmpty() && !allowEmpty) {
             throw UserInputException.noStackTrace(
-                    "Refusing to apply an empty %s configuration. Check source URLs and parsed entries. "
-                            + "If clearing managed DNS rules is intentional, set ALLOW_EMPTY_CONFIG=true."
+                    ("Refusing to apply an empty %s configuration. Check source URLs and parsed entries. "
+                            + "If clearing managed DNS rules is intentional, set ALLOW_EMPTY_CONFIG=true.")
                             .formatted(description));
         }
     }
