@@ -284,3 +284,16 @@ The workflow supports two optional repository/environment variables:
 For Cloudflare, both block and redirect entries must be non-empty by default because the workflow replaces both sets of managed rules. For NextDNS, a configured source that parses to zero entries is rejected; when both `BLOCK` and `REDIRECT` are omitted, clearing managed settings requires `ALLOW_EMPTY_CONFIG=true`.
 
 Use the empty-configuration override only when clearing managed rules is intentional. A dry run is a summary of validated input counts, not a complete provider-side diff.
+
+---
+
+### DNS donor and IPv4/IPv6 support
+
+`DONOR_DNS` is used to re-check IP addresses for redirect domains. It now accepts an IPv4 address, an IPv6 address, or a DNS-over-HTTPS (DoH) URL. Both A and AAAA records are queried.
+
+- If the donor still returns the configured IP, that IP is retained to avoid unnecessary rule changes.
+- If the current IP disappears, the replacement must use the same address family (IPv4 or IPv6); the code will not silently switch families.
+- If the donor has no suitable records, the configured IP is retained.
+- The application waits for all donor lookups to finish before sending rules to the provider, preventing late IP mutations after rule creation begins.
+
+Examples for `DONOR_DNS`: `1.1.1.1`, `2606:4700:4700::1111`, or `https://cloudflare-dns.com/dns-query`. DoH availability depends on the network used by GitHub Actions.
