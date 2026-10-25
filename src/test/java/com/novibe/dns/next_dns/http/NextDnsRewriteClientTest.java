@@ -2,6 +2,7 @@ package com.novibe.dns.next_dns.http;
 
 import com.google.gson.Gson;
 import com.novibe.common.base_structures.DnsProfile;
+import com.novibe.common.exception.DnsApiException;
 import com.novibe.dns.next_dns.http.dto.request.CreateRewriteDto;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +20,9 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
@@ -54,12 +58,25 @@ class NextDnsRewriteClientTest {
     }
 
     @Test
-    void keepsSendingWhenApiAnswersWithErrors() throws IOException, InterruptedException {
-        doReturn(response(200, "{\"errors\":[{\"code\":\"invalidContent\"}]}")).when(httpClient).send(any(), any());
+    void failsOnFirstRefusedRewrite() throws IOException, InterruptedException {
+        doReturn(response(200, "{\"errors\":[{\"code\":\"conflict\"}]}")).when(httpClient).send(any(), any());
 
-        nextDnsRewriteClient.deleteRewritesByIds(List.of("first", "second", "third"));
+        DnsApiException exception = assertThrows(DnsApiException.class, () -> nextDnsRewriteClient.saveRewrites(List.of(
+                new CreateRewriteDto("chatgpt.com", "1.2.3.4"),
+                new CreateRewriteDto("openai.com", "1.2.3.4"))));
 
-        verify(httpClient, times(3)).send(any(), any());
+        assertTrue(exception.getMessage().startsWith("Failed request 1 of 2"));
+        verify(httpClient, times(1)).send(any(), any());
+    }
+
+    @Test
+    void failsWhenApiRefusesToDeleteRewrite() throws IOException, InterruptedException {
+        doReturn(response(200, "{\"errors\":[{\"code\":\"notFound\"}]}")).when(httpClient).send(any(), any());
+
+        assertThrows(DnsApiException.class,
+                () -> nextDnsRewriteClient.deleteRewritesByIds(List.of("first", "second", "third")));
+
+        verify(httpClient, times(1)).send(any(), any());
     }
 
     @Test
